@@ -10,12 +10,10 @@ load_dotenv()
 TOKEN=os.getenv("TOKEN")  # Your bot token
 GUILD_ID=int(os.getenv("GUILD_ID"))  # Your server ID
 VOICE_CHANNEL_ID=int(os.getenv("VOICE_CHANNEL_ID"))  # Your voice channel ID
-PLAY_INTERVAL = random.randint(int(os.getenv("MIN")), int(os.getenv("MAX"))) * 60
+PLAY_INTERVAL = random.randint(int(os.getenv("MIN")), int(os.getenv("MAX"))) * 60 # Randomize interval
 SOUNDS_DIR = "./Screams"
 # ---------------------------------------
 
-# Get a list of all sound files in the directory
-sound_files = [f for f in os.listdir(SOUNDS_DIR) if os.path.isfile(os.path.join(SOUNDS_DIR, f))]
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
@@ -52,7 +50,15 @@ async def play_sound():
 
         if voice_client.is_playing():
             voice_client.stop()
+        
+        PLAY_INTERVAL = random.randint(int(os.getenv("MIN")), int(os.getenv("MAX"))) * 60 # Randomize interval
+        print(f"Next play in {PLAY_INTERVAL/60} minutes.")
+        
+        # Get a list of all sound files in the directory
+        sound_files = [f for f in os.listdir(SOUNDS_DIR) if os.path.isfile(os.path.join(SOUNDS_DIR, f))]
 
+        SOUND_FILE = os.path.join(SOUNDS_DIR, random.choice(sound_files)) # Random Sound File
+        
         # Play the file using ffmpeg
         source = discord.FFmpegPCMAudio(SOUND_FILE)
         voice_client.play(source)
@@ -62,10 +68,7 @@ async def play_sound():
 
         print("Finished playing sound.")
         
-        PLAY_INTERVAL = random.randint(int(os.getenv("MIN")), int(os.getenv("MAX"))) * 60 # Randomize interval
-        print(f"Next play in {PLAY_INTERVAL} minutes.")
-        
-        SOUND_FILE = os.path.join(SOUNDS_DIR, random.choice(sound_files)) # Random Sound File
+
         
     except Exception as e:
         print(f"Error playing sound: {e}")
