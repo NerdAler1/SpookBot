@@ -100,6 +100,7 @@ async def on_voice_state_update(member, before, after):
     # Someone joined the channel
     if after.channel == channel and (before.channel != channel):
         if not voice_client or not voice_client.is_connected():
+            await asyncio.sleep(10)
             await connect_to_channel()
             if not play_task:
                 play_task = asyncio.create_task(play_sounds_loop())
