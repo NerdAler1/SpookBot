@@ -3,6 +3,7 @@ import asyncio
 import random
 from dotenv import load_dotenv
 import os
+import logging
 
 load_dotenv()
 # --------------- CONFIG ----------------
@@ -15,11 +16,17 @@ SOUNDS_DIR = "./Screams"
 # ---------------------------------------
 
 intents = discord.Intents.default()
-intents.voice_states = True  # Needed to track who joins/leaves VC
+intents.voice_states = True
 intents.guilds = True
 client = discord.Client(intents=intents)
 voice_client: discord.VoiceClient | None = None
 play_task: asyncio.Task | None = None
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 async def connect_to_channel():
     """Connect bot to VC."""
@@ -29,9 +36,11 @@ async def connect_to_channel():
     if not channel:
         print("Voice channel not found!")
         return None
-    if not voice_client or not voice_client.is_connected():
-        print(f"Connecting to {channel.name}...")
-        voice_client = await channel.connect()
+    if voice_client and voice_client.is_connected():
+        print("Already connected to a voice channel.")
+        return voice_client
+    print(f"Connecting to {channel.name}...")
+    voice_client = await channel.connect()
     return voice_client
 
 async def disconnect_from_channel():
@@ -51,13 +60,12 @@ async def play_sounds_loop():
     while True:
         try:
             if not voice_client or not voice_client.is_connected():
-                return  # Stop loop if disconnected
-
+                return
             if voice_client.is_playing():
                 voice_client.stop()
 
             interval = random.randint(MIN_INTERVAL, MAX_INTERVAL) * 60
-            print(f"Next play in {interval / 60:.1f} minutes.")
+            logging.info(f"Next play in {interval / 60:.1f} minutes.")
 
             sound_files = [f for f in os.listdir(SOUNDS_DIR) if os.path.isfile(os.path.join(SOUNDS_DIR, f))]
             if not sound_files:
@@ -72,42 +80,57 @@ async def play_sounds_loop():
             while voice_client.is_playing():
                 await asyncio.sleep(1)
 
-            print("Finished playing sound.")
+            logging.info("Finished playing sound.")
             await asyncio.sleep(interval)
 
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"Error playing sound: {e}")
+            logging.error(f"Error playing sound: {e}")
             await asyncio.sleep(5)
 
 @client.event
 async def on_ready():
+    global play_task
     print(f"Bot connected as {client.user}")
+    guild = client.get_guild(GUILD_ID)
+    channel = guild.get_channel(VOICE_CHANNEL_ID)
+
+    if not channel:
+        print("Voice channel not found on startup.")
+        return
+
+    # Check if any non-bot members are in the voice channel
+    non_bots_present = any(not m.bot for m in channel.members)
+    if non_bots_present:
+        print("Non-bot members already in voice channel. Connecting...")
+        await connect_to_channel()
+        if not play_task:
+            play_task = asyncio.create_task(play_sounds_loop())
+    else:
+        print("No members in voice channel at startup.")
 
 @client.event
 async def on_voice_state_update(member, before, after):
-    """Join VC when someone else joins, leave when everyone else leaves."""
     global play_task
     if member.bot:
-        return  # Ignore other bots
+        return
 
     guild = client.get_guild(GUILD_ID)
     channel = guild.get_channel(VOICE_CHANNEL_ID)
     if not channel:
         return
 
-    # Someone joined the channel
-    if after.channel == channel and (before.channel != channel):
+    # Someone joined
+    if after.channel == channel and before.channel != channel:
         if not voice_client or not voice_client.is_connected():
             await asyncio.sleep(10)
             await connect_to_channel()
             if not play_task:
                 play_task = asyncio.create_task(play_sounds_loop())
 
-    # Someone left the channel
-    if before.channel == channel and (after.channel != channel):
-        # Check if any non-bot members are left
+    # Someone left
+    if before.channel == channel and after.channel != channel:
         if len([m for m in channel.members if not m.bot]) == 0:
             await disconnect_from_channel()
 
